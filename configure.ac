@@ -41,7 +41,7 @@ AC_SUBST(pdflatex)
 PKG_CHECK_MODULES([GUILE], [guile-2.0])
 PKG_CHECK_MODULES([EMACSY], [emacsy])
 
-AC_SUBST(EMACSY_MODULE, "`pkg-config emacsy --variable=moduledir`")
+AC_SUBST(EMACSY_MODULE, "`pkg-config emacsy --variable=moduledir || echo $EMACSY_MODULE`")
 #AX_CHECK_GLUT
 # The autoconf macro does not prefer these frameworks over the
 # standard X11 locations.
