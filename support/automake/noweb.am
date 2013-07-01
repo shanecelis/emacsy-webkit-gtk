@@ -1,0 +1,59 @@
+# noweb.am
+#SUFFIXES += .nw .tex .pdf
+
+if NOWEB
+BOILERPLATE=
+%.tex : %.nw 
+	$(AM_V_at) $(MAKE) all.defs
+	$(AM_V_GEN) noweave $(NOWEAVE_FLAGS) -n -delay -indexfrom all.defs $^ | cpif $@
+
+WARN_NOTANGLE = $(top_srcdir)/bin/warn-notangle
+
+
+%.h : %.nw $(BOILERPLATE)
+	$(AM_V_GEN) $(WARN_NOTANGLE) -o $@ $(WARN_NOTANGLE_FLAGS) -- $(NOTANGLE_H_FLAGS) -R"file:$@" $^ 
+
+%-test.c %.c %.cpp : %.nw $(BOILERPLATE)
+	$(AM_V_GEN) $(WARN_NOTANGLE) -o $@ $(WARN_NOTANGLE_FLAGS) -- $(NOTANGLE_C_FLAGS)  -R"file:$@" $^
+
+%-test.scm %.scm : %.nw $(BOILERPLATE)
+	$(AM_V_GEN)	$(WARN_NOTANGLE) -o $@ $(WARN_NOTANGLE_FLAGS) -- $(NOTANGLE_LISP_FLAGS) -R"file:$@" $^
+
+all.defs: $(NOWEB_DEFS)
+	$(AM_V_GEN)	sort -u $^ | cpif $@
+
+%.defs: %.nw
+	$(AM_V_GEN) nodefs $< > $@
+
+%.nw.files : %.nw
+	$(AM_V_GEN) noroots $^ | grep file: | perl -pe 's/<<file:(\S+)>>/\1/g;' | cpif $@
+
+# %-paper.nw : %.nw $(top_srcdir)/support/noweb/paper-wrapper.nw
+# 	$(AM_V_GEN) (cat $(top_srcdir)/support/noweb/paper-wrapper.nw |	perl -pe "s/\\@FILE\\@/$$(basename -s .nw $<)/;") | cpif $@
+
+NOWEB_DEFS = $(NOWEB_FILES:.nw=.defs)
+NOWEB_TEXS = $(NOWEB_FILES:.nw=.tex)
+EXTRA_DIST += $(NOWEB_FILES) $(NOWEB_TEXS) $(NOWEB_DEFS) $(NOWEB_PRODUCTS)
+BUILT_SOURCES += $(NOWEB_TEXS) $(NOWEB_DEFS) $(NOWEB_PRODUCTS)
+CLEANFILES += $(NOWEB_TEXS) $(NOWEB_DEFS) $(NOWEB_PRODUCTS) all.defs \
+	$(NOWEB_DOCS:.pdf=.aux) $(NOWEB_DOCS:.pdf=.log) $(NOWEB_DOCS:.pdf=.nwi) \
+	$(NOWEB_DOCS:.pdf=.out) $(NOWEB_DOCS:.pdf=.tdo) $(NOWEB_DOCS:.pdf=.toc) \
+	$(NOWEB_DOCS:.pdf=.tex.log) $(NOWEB_DOCS)
+
+else
+%-test.scm %.scm %.h %-test.c %.c %.cpp %.tex : %.nw
+	$(warning Warning: unable to update $@ from changed $< without noweb.)
+endif
+
+if PDFLATEX
+%.pdf: %.tex
+	$(AM_V_GEN)	$(pdflatex) -shell-escape -interaction=batchmode -halt-on-error $< &> $$(basename $<).log || (echo ERROR; cat $$(basename $<).log; false)
+	noindex $<
+	$(AM_V_GEN) $(pdflatex) -shell-escape -interaction=batchmode -halt-on-error $< &> $$(basename $<).log || (echo ERROR; cat $$(basename $<).log; false)
+
+else
+%.pdf : %.tex
+	$(warning Warning: unable to update $@ from changed $< without latexmk.)
+
+endif
+
