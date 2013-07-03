@@ -70,6 +70,7 @@ pdflatex="TEXINPUTS=${imagesdir}: $pdflatex";
 # Output files.
 AC_CONFIG_HEADERS([src/config.h])
 AC_CONFIG_FILES([ Makefile
+                  bin/Makefile 
                   src/Makefile 
                   tests/Makefile 
                   tests/works-without-noweb.sh
