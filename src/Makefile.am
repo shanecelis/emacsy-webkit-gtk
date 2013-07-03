@@ -4,7 +4,7 @@ BUILT_SOURCES =
 CLEANFILES=hello-emacsy.c.x 
 
 dist-hook:
-	mv $(distdir)/*.pdf $(top_distdir)
+	cp $(distdir)/*.pdf $(top_distdir)
 
 NOWEB_DOCS = hello-emacsy-paper.pdf
 NOWEB_FILES = hello-emacsy.nw hello-emacsy-paper.nw

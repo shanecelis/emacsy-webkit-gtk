@@ -74,5 +74,5 @@ AC_CONFIG_FILES([ Makefile
                   src/Makefile 
                   tests/Makefile 
                   tests/works-without-noweb.sh
-                  ])
+                  ], [chmod +x tests/works-without-noweb.sh])
 AC_OUTPUT
