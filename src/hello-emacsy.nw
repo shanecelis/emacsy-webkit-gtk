@@ -254,7 +254,8 @@ extended the user interface to accept new commands \verb|+| and
 \verb|-| to change the state.
 
 %\newpage
-\appendix
+%\appendix
+\begin{subappendices}
 
 \section{Plaintext Please}
 Here are the plaintext files: \href{http://gnufoo.org/emacsy/emacsy.h}{emacsy.h},
@@ -333,9 +334,4 @@ if (glut_mod_flags & GLUT_ACTIVE_CTRL)
 if (glut_mod_flags & GLUT_ACTIVE_ALT)
    mod_flags |= EY_MODKEY_META;
 @ 
-
-\section{Noweb Index}
-\subsection{Defined Fragments}
-\nowebchunks
-%% \subsection{Identifier Index}
-%% \nowebindex
+\end{subappendices}

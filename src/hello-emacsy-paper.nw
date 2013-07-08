@@ -12,6 +12,7 @@
 \usepackage{color}
 %\usepackage{framed}
 \usepackage{textcomp}
+\usepackage[toc,page]{appendix}
 %\definecolor{listinggray}{gray}{0.9}
 %\definecolor{shadecolor}{HTML}{211e1e}
 \lstset{
@@ -110,4 +111,9 @@
 %\end{multicols}
 
 %% 
+\section{Noweb Index}
+\subsection{Defined Fragments}
+\nowebchunks
+%% \subsection{Identifier Index}
+%% \nowebindex
 \end{document}
