@@ -2,54 +2,40 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.63])
-AC_INIT([hello-emacsy], [1.0], [bug-report@address])
+AC_INIT([hello-emacsy], [0.1.1], [shane.celis@gmail.com])
 AC_CONFIG_AUX_DIR([support/build-aux])
 
 # We're going to use GNUMake and we're going to like it.
 AM_INIT_AUTOMAKE([-Wall foreign -Wno-portability])
-AM_EXTRA_RECURSIVE_TARGETS([run preview])
+AM_EXTRA_RECURSIVE_TARGETS([run show-doc])
 AC_CONFIG_MACRO_DIR([support/m4])
 # Checks for programs.
 AC_PROG_CC_C_O
 AC_PROG_LIBTOOL
+AX_CHECK_NOWEB
+AC_PATH_PROG([PERL], [perl])
+AC_SUBST([PERL])
 
-AC_CHECK_PROG(NOWEB_CHECK,noweb,yes)
-if test x"$NOWEB_CHECK" != x"yes" ; then
-    AC_MSG_WARN([Must have noweb installed to alter literate source code.])
-fi
-AC_ARG_ENABLE([noweb],
-              [AC_HELP_STRING([--enable-noweb=@<:@yes/no@:>@],
-                              [Enable noweb @<:@default=yes@:>@])],
-              [enable_noweb=no],
-              [enable_noweb=yes])
-AM_CONDITIONAL([NOWEB], [test x"$NOWEB_CHECK" = xyes && test x"$enable_noweb" = xyes])
+AC_PATH_PROG([BASH], [bash])
+AC_SUBST([BASH])
 
-AC_ARG_ENABLE([pdflatex],
-              [AC_HELP_STRING([--enable-pdflatex=@<:@yes/no@:>@],
-                              [Enable pdflatex @<:@default=yes@:>@])],
-              [enable_pdflatex=no],
-              [enable_pdflatex=yes])
-AC_CHECK_PROG(PDFLATEX_CHECK,pdflatex,yes)
-if test x"$PDFLATEX_CHECK" != x"yes" ; then
-    AC_MSG_WARN([Must have pdflatex installed to produce PDFs.])
-fi
-AM_CONDITIONAL([PDFLATEX], [test x"$PDFLATEX_CHECK" = xyes && test x"$enable_pdflatex" = xyes])
-AC_PATH_PROG([pdflatex], pdflatex)
-AC_SUBST(pdflatex)
+AC_PATH_PROG([guile_snarf], guile-snarf)
+AC_SUBST(guile_snarf)
 
 # Checks for libraries.
 PKG_CHECK_MODULES([GUILE], [guile-2.0])
 PKG_CHECK_MODULES([EMACSY], [emacsy])
 
 AC_SUBST(EMACSY_MODULE, "`pkg-config emacsy --variable=moduledir || echo $EMACSY_MODULE`")
-#AX_CHECK_GLUT
-# The autoconf macro does not prefer these frameworks over the
-# standard X11 locations.
 
-AC_SUBST(GL_LDFLAGS, ["-framework OpenGL"])
-AC_SUBST(GLUT_LDFLAGS, ["-framework GLUT"])
-AC_SUBST(GLU_LDFLAGS, [])
-
+dnl AX_CHECK_GL* doesn't respect --with-gl=nox argument :(
+AC_CANONICAL_HOST
+AS_CASE([${host}],
+        [*-darwin*],
+        [AC_SUBST(GL_LDFLAGS, ["-framework OpenGL"])
+         AC_SUBST(GLUT_LDFLAGS, ["-framework GLUT"])
+         AC_SUBST(GLU_LDFLAGS, [])],
+        [AX_CHECK_GLUT])
 
 # Checks for header files.
 AC_HEADER_STDC
@@ -60,9 +46,7 @@ AC_CHECK_HEADERS([stdio.h])
 # Checks for library functions.
 AC_CHECK_FUNCS([puts])
 
-# 
-dnl AC_SUBST(EMACSY_CFLAGS, ['-I${top_srcdir}/../..'])
-dnl AC_SUBST(EMACSY_LIBS, ['${top_srcdir}/../../libemacsy.a'])
+AC_SUBST(ENV, ['${top_builddir}/bin/env'])
 AC_SUBST(imagesdir, ['${top_srcdir}/support/images'])
 AC_SUBST(automakedir, ['${top_srcdir}/support/automake'])
 pdflatex="TEXINPUTS=${imagesdir}: $pdflatex";
@@ -73,6 +57,9 @@ AC_CONFIG_FILES([ Makefile
                   bin/Makefile 
                   src/Makefile 
                   tests/Makefile 
-                  tests/works-without-noweb.sh
-                  ], [chmod +x tests/works-without-noweb.sh])
+                  ], [])
+AC_CONFIG_FILES([ tests/works-without-noweb.sh ], [chmod +x tests/works-without-noweb.sh])
+AC_CONFIG_FILES([bin/env], [chmod a+x bin/env])
+AC_CONFIG_FILES([bin/warn-notangle], [chmod a+x bin/warn-notangle])
+
 AC_OUTPUT

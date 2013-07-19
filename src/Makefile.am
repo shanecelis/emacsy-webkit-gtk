@@ -3,6 +3,7 @@
 BUILT_SOURCES =
 CLEANFILES=hello-emacsy.c.x 
 
+WARN_NOTANGLE = $(top_builddir)/bin/warn-notangle
 dist-hook:
 	cp $(distdir)/*.pdf $(top_distdir)
 
@@ -10,6 +11,8 @@ NOWEB_DOCS = hello-emacsy-paper.pdf
 NOWEB_FILES = hello-emacsy.nw hello-emacsy-paper.nw
 NOWEB_PRODUCTS = hello-emacsy.c .hello-emacsy.scm
 EXTRA_DIST = $(NOWEB_DOCS)
+
+doc-local : 	hello-emacsy-paper.pdf
 
 
 hello-emacsy-paper.pdf : hello-emacsy.tex
@@ -23,7 +26,7 @@ hello-emacsy.o : hello-emacsy.c.x
 bin_PROGRAMS = hello-emacsy
 
 AM_CFLAGS  = $(EMACSY_CFLAGS) $(GUILE_CFLAGS)
-hello_emacsy_LDADD   = $(EMACSY_LIBS) $(GUILE_LIBS)
+hello_emacsy_LDADD   = $(EMACSY_LIBS) $(GUILE_LIBS) $(GLUT_LIBS)
 hello_emacsy_LDFLAGS = $(GUILE_LDFLAGS) $(GLUT_LDFLAGS) $(GL_LDFLAGS) $(GLU_LDFLAGS)
 hello_emacsy_SOURCES = hello-emacsy.c
 
@@ -32,8 +35,5 @@ MAINTAINERCLEANFILES = Makefile.in config.h.in
 include $(top_srcdir)/support/automake/noweb.am
 include $(top_srcdir)/support/automake/guile.am
 
-preview-local: $(NOWEB_DOCS)
-	open -a Skim.app $^ || open -a Preview.app $^
-
 run-local: hello-emacsy
-	GUILE_LOAD_PATH=@EMACSY_MODULE@ ./hello-emacsy
+	$(ENV) ./hello-emacsy

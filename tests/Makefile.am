@@ -1,5 +1,5 @@
 TEST_EXTENSIONS = .sh
-SH_LOG_COMPILER = /bin/bash -x
+SH_LOG_COMPILER = $(BASH) -x
 TESTS=
 #works-without-noweb.sh
 
