@@ -7,7 +7,7 @@ AC_CONFIG_AUX_DIR([support/build-aux])
 
 # We're going to use GNUMake and we're going to like it.
 AM_INIT_AUTOMAKE([-Wall foreign -Wno-portability])
-AM_EXTRA_RECURSIVE_TARGETS([run show-doc])
+dnl AM_EXTRA_RECURSIVE_TARGETS([run show-doc])
 AC_CONFIG_MACRO_DIR([support/m4])
 # Checks for programs.
 AC_PROG_CC_C_O
@@ -25,6 +25,8 @@ AC_SUBST(guile_snarf)
 # Checks for libraries.
 PKG_CHECK_MODULES([GUILE], [guile-2.0])
 PKG_CHECK_MODULES([EMACSY], [emacsy])
+dnl PKG_CHECK_MODULES([GTK], [gtk+-2.0])
+PKG_CHECK_MODULES([WEBKIT], [webkitgtk-3.0])
 
 AC_SUBST(EMACSY_MODULE, "`pkg-config emacsy --variable=moduledir || echo $EMACSY_MODULE`")
 
