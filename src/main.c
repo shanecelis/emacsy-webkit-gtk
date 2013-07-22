@@ -40,7 +40,6 @@ static gboolean closeWebViewCb(WebKitWebView* webView, GtkWidget* window);
 static gboolean keyPressWindowCb(GtkWidget* widget, GdkEventKey* event, gpointer userData);
 static gboolean idling(void *userData);
 
-GtkWidget *status_bar;
 GtkWidget *label;
 WebKitWebView *webView;
 
@@ -85,25 +84,20 @@ int main(int argc, char* argv[])
   g_signal_connect(main_window, "destroy", G_CALLBACK(destroyWindowCb), NULL);
   g_signal_connect(webView, "close-web-view", G_CALLBACK(closeWebViewCb), main_window);
 
-  status_bar = gtk_statusbar_new();
   label = gtk_label_new("label");
   gtk_misc_set_alignment(GTK_MISC(label), 0.0f, 0.0f);
-  gint context_id = gtk_statusbar_get_context_id(GTK_STATUSBAR(status_bar), "Echo Area");
   gtk_label_set_use_underline(GTK_LABEL(label), FALSE);
   gtk_label_set_single_line_mode(GTK_LABEL(label), TRUE);
 
-  g_idle_add((GSourceFunc) idling, context_id);
+  g_idle_add((GSourceFunc) idling, NULL);
 
-  g_signal_connect(main_window, "key_press_event", G_CALLBACK(keyPressWindowCb), GINT_TO_POINTER(context_id));
-  g_signal_connect(main_window, "key_release_event", G_CALLBACK(keyPressWindowCb), GINT_TO_POINTER(context_id));
+  g_signal_connect(main_window, "key_press_event", G_CALLBACK(keyPressWindowCb), NULL);
+  g_signal_connect(main_window, "key_release_event", G_CALLBACK(keyPressWindowCb), NULL);
     
   GtkWidget *vbox;
   vbox = gtk_vbox_new(FALSE, 1);
   gtk_container_add(GTK_CONTAINER(vbox), scrolledWindow);
   gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(vbox), status_bar, FALSE, FALSE, 0);
-  //gtk_container_add(GTK_CONTAINER(vbox), status_bar);
-
 
   // Put the scrollable area into the main window
   gtk_container_add(GTK_CONTAINER(main_window), /*scrolledWindow*/
@@ -111,13 +105,12 @@ int main(int argc, char* argv[])
 
   // Load a web page into the browser instance
   //webkit_web_view_load_uri(webView, "http://www.webkitgtk.org/");
-  //webkit_web_view_load_uri(webView, "http://google.com/");
-  webkit_web_view_load_uri(webView, "http://slashdot.org");
+  webkit_web_view_load_uri(webView, "http://google.com/");
+  //webkit_web_view_load_uri(webView, "http://slashdot.org");
 
   // Make sure that when the browser area becomes visible, it will get mouse
   // and keyboard events
-  //gtk_widget_grab_focus(GTK_WIDGET(webView));
-  gtk_widget_grab_focus(GTK_WIDGET(status_bar));
+  gtk_widget_grab_focus(GTK_WIDGET(webView));
 
   // Make sure the main window and all its contents are visible
   gtk_widget_show_all(main_window);
@@ -208,6 +201,7 @@ static gboolean idling(void *userData)
     gtk_main_quit();
 
   const char *status = emacsy_message_or_echo_area();
+  //printf("status: %s\n", status);
   char *markup = g_markup_printf_escaped ("<span foreground=\"white\" background=\"black\" underline=\"single\"><tt>%s </tt></span>", status);
   gtk_label_set_markup(GTK_LABEL(label), markup);
   g_free(markup);
@@ -218,10 +212,7 @@ static gboolean idling(void *userData)
   message[255] = NULL;
   message[emacsy_minibuffer_point() - 1] = '_';
   gtk_label_set_pattern(GTK_LABEL(label), message);
-
-  gtk_statusbar_pop(GTK_STATUSBAR(status_bar), GPOINTER_TO_INT(userData));
-  gtk_statusbar_push(GTK_STATUSBAR(status_bar), GPOINTER_TO_INT(userData), status);
-
+  return TRUE;
 }
 
 SCM_DEFINE(scm_load_url, "load-url", 1, 0, 0,
