@@ -49,7 +49,6 @@ AC_CHECK_HEADERS([stdio.h])
 AC_CHECK_FUNCS([puts])
 
 AC_SUBST(ENV, ['${top_builddir}/bin/env'])
-AC_SUBST(imagesdir, ['${top_srcdir}/support/images'])
 AC_SUBST(automakedir, ['${top_srcdir}/support/automake'])
 pdflatex="TEXINPUTS=${imagesdir}: $pdflatex";
 
@@ -60,8 +59,6 @@ AC_CONFIG_FILES([ Makefile
                   src/Makefile 
                   tests/Makefile 
                   ], [])
-AC_CONFIG_FILES([ tests/works-without-noweb.sh ], [chmod +x tests/works-without-noweb.sh])
 AC_CONFIG_FILES([bin/env], [chmod a+x bin/env])
-AC_CONFIG_FILES([bin/warn-notangle], [chmod a+x bin/warn-notangle])
 
 AC_OUTPUT

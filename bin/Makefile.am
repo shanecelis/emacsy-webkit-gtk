@@ -1,3 +1,3 @@
 EXTRA_DIST = 
 
-MAINTAINERCLEANFILES = Makefile.in warn-notangle env
+MAINTAINERCLEANFILES = Makefile.in env
