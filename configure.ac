@@ -12,7 +12,7 @@ AC_CONFIG_MACRO_DIR([support/m4])
 # Checks for programs.
 AC_PROG_CC_C_O
 AC_PROG_LIBTOOL
-AX_CHECK_NOWEB
+dnl AX_CHECK_NOWEB
 AC_PATH_PROG([PERL], [perl])
 AC_SUBST([PERL])
 

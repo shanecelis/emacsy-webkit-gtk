@@ -1,11 +1,10 @@
-Hello, Emacsy: A Minimal Emacsy Example Program
-==============================
+Emacsy WebKit GTK Browser Example
+=================================
 
 This program contains an example program for the proposed [Emacsy
 project](http://www.kickstarter.com/projects/568774734/emacsy-an-embeddable-emacs).
-It is written as a literate program using the
-[noweb](http://www.cs.tufts.edu/~nr/noweb).  The officially released
-[PDF is available
-here](http://gnufoo.org/emacsy/minimal-emacsy-example.pdf).
+It contains a barebones browser with an echo-area/minibuffer any
+Emacsian will love.  
 
+Need a screenshot.
 
