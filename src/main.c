@@ -1,8 +1,15 @@
+/* main.c
+
+   This example program demonstrates how to embed Emacsy into a
+   minimal WebKit GTK browser.
+*/
+
 /*
  * Copyright (C) 2006, 2007 Apple Inc.
  * Copyright (C) 2007 Alp Toker <alp@atoker.com>
  * Copyright (C) 2011 Lukasz Slachciak
  * Copyright (C) 2011 Bob Murphy
+ * Copyright (C) 2013 Shane Celis
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,100 +41,142 @@
 #endif
 #include <libguile.h>
 
-static void init_primitives(void);
-static void destroyWindowCb(GtkWidget* widget, GtkWidget* window);
-static gboolean closeWebViewCb(WebKitWebView* webView, GtkWidget* window);
-static gboolean keyPressWindowCb(GtkWidget* widget, GdkEventKey* event, gpointer userData);
-static gboolean idling(void *userData);
+/* Event Handlers */
+static void destroy_window(GtkWidget* widget, GtkWidget* window);
+static gboolean close_window(WebKitWebView* webView, GtkWidget* window);
+static gboolean key_press(GtkWidget* widget, GdkEventKey* event, gpointer user_data);
+static gboolean update_echo_area(void *user_data);
 
-GtkWidget *label;
-WebKitWebView *webView;
+/* Registers the Scheme primitive procedures */
+static void init_primitives(void); 
 
+/* Scheme Primitives */
+SCM scm_load_url(SCM url);
+SCM scm_webkit_forward();
+SCM scm_webkit_backward();
+SCM scm_webkit_reload();
+SCM scm_webkit_find_next();
+SCM scm_webkit_find_previous();
+SCM scm_webkit_find_finish();
+SCM scm_webkit_find_zoom_in();
+SCM scm_webkit_find_zoom_out();
+//SCM scm_webkit_eval_javascript(SCM script, SCM when_finished_proc);
+
+/* Global state */
+GtkWidget *label;               /* Shows Emacsy's echo area or minibuffer */
+WebKitWebView *web_view;        /* The WebKit browser */
+
+/*
+  Create a minimal web browser that has Emacsy integrated into it.
+ */
 int main(int argc, char* argv[])
 {
-  int err = 0;
+  int err;
+  // Initialize GNU Guile.
   scm_init_guile();
+  // Initialize Emacsy.
   err = emacsy_initialize();
   if (err) 
     return err;
 
+  // Register the primitive procedures that control the browser.
   init_primitives();  
 
-  scm_c_eval_string("(define-interactive (goto #:optional (url (read-from-minibuffer \"URL: \"))) (load-url url))");
+  // You can evaluate S-expressions here.
+  scm_c_eval_string(
+"(define (safe-load filename)     "
+"  (call-with-error-handling      "
+"    (lambda () (load filename))))");
 
-  // Initialize GTK+
+  // But to make the application easy to mold, it's best to load the
+  // Scheme code from a file.
+  if (access(".emacsy-webkit-gtk", R_OK) != -1) {
+    // We could load the file like this:
+
+    //scm_c_primitive_load(".emacy-webkit-gtk.scm");
+
+    // But this will drop us into a REPL if anything goes wrong.
+    scm_call_1(scm_c_private_ref("guile-user", "safe-load"),
+               scm_from_locale_string(".emacsy-webkit-gtk"));
+  }
+
+  // Initialize GTK+.
   gtk_init(&argc, &argv);
 
-
-  // Create an 800x600 window that will contain the browser instance
+  // Create an 800x600 window that will contain the browser instance.
   GtkWidget *main_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_default_size(GTK_WINDOW(main_window), 800, 600);
 
+  /* you might need to use GTK_STATE_ACTIVE or GTK_STATE_PRELIGHT */
   GdkColor black = {0, 0x0, 0x0, 0x0};
   GdkColor white = {0, 0xFFFF, 0xFFFF, 0xFFFF};
-  /* you might need to use GTK_STATE_ACTIVE or GTK_STATE_PRELIGHT */
   gtk_widget_modify_bg(GTK_WINDOW(main_window), GTK_STATE_NORMAL, &black);
   gtk_widget_modify_fg(GTK_WINDOW(main_window), GTK_STATE_NORMAL, &white);
 
   // Create a browser instance
-  webView = WEBKIT_WEB_VIEW(webkit_web_view_new());
-  webkit_web_view_set_highlight_text_matches(webView, TRUE);
+  web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
+  webkit_web_view_set_highlight_text_matches(web_view, TRUE);
 
   // Create a scrollable area, and put the browser instance into it
-  GtkWidget *scrolledWindow = gtk_scrolled_window_new(NULL, NULL);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolledWindow),
+  GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),
                                  GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-  gtk_container_add(GTK_CONTAINER(scrolledWindow), GTK_WIDGET(webView));
+  gtk_container_add(GTK_CONTAINER(scrolled_window), GTK_WIDGET(web_view));
 
-  // Set up callbacks so that if either the main window or the browser instance is
-  // closed, the program will exit
-  g_signal_connect(main_window, "destroy", G_CALLBACK(destroyWindowCb), NULL);
-  g_signal_connect(webView, "close-web-view", G_CALLBACK(closeWebViewCb), main_window);
+  // Set up callbacks so that if either the main window or the browser
+  // instance is closed, the program will exit.
+  g_signal_connect(main_window, "destroy", G_CALLBACK(destroy_window), NULL);
+  g_signal_connect(web_view, "close-web-view", G_CALLBACK(close_window), main_window);
 
+  // This label will be where we display Emacsy's echo-area.
   label = gtk_label_new("label");
   gtk_misc_set_alignment(GTK_MISC(label), 0.0f, 0.0f);
   gtk_label_set_use_underline(GTK_LABEL(label), FALSE);
   gtk_label_set_single_line_mode(GTK_LABEL(label), TRUE);
 
-  g_idle_add((GSourceFunc) idling, NULL);
+  // While idle, process events in Emacsy and upate the echo-area.
+  g_idle_add((GSourceFunc) process_and_update_emacsy, NULL);
 
-  g_signal_connect(main_window, "key_press_event", G_CALLBACK(keyPressWindowCb), NULL);
-  g_signal_connect(main_window, "key_release_event", G_CALLBACK(keyPressWindowCb), NULL);
+  // Handle key press and release events.
+  g_signal_connect(main_window, "key_press_event", G_CALLBACK(key_press), NULL);
+  g_signal_connect(main_window, "key_release_event", G_CALLBACK(key_press), NULL);
     
   GtkWidget *vbox;
   vbox = gtk_vbox_new(FALSE, 1);
-  gtk_container_add(GTK_CONTAINER(vbox), scrolledWindow);
+  gtk_container_add(GTK_CONTAINER(vbox), scrolled_window);
   gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
 
-  // Put the scrollable area into the main window
-  gtk_container_add(GTK_CONTAINER(main_window), /*scrolledWindow*/
-                    vbox);
+  // Put the scrollable area into the main window.
+  gtk_container_add(GTK_CONTAINER(main_window), vbox);
 
-  // Load a web page into the browser instance
-  //webkit_web_view_load_uri(webView, "http://www.webkitgtk.org/");
-  webkit_web_view_load_uri(webView, "http://google.com/");
-  //webkit_web_view_load_uri(webView, "http://slashdot.org");
+  // Load a web page into the browser instance.
+  webkit_web_view_load_uri(web_view, 
+                           "http://shanecelis.github.io/2013/06/15/the-garden/");
 
   // Make sure that when the browser area becomes visible, it will get mouse
-  // and keyboard events
-  gtk_widget_grab_focus(GTK_WIDGET(webView));
+  // and keyboard events.
+  gtk_widget_grab_focus(GTK_WIDGET(web_view));
 
-  // Make sure the main window and all its contents are visible
+  // Make sure the main window and all its contents are visible.
   gtk_widget_show_all(main_window);
 
-  // Run the main GTK+ event loop
+  // Run the main GTK+ event loop.
   gtk_main();
 
   return 0;
 }
 
+/*
+  Event Handlers
+  ==============
+*/
 
-static void destroyWindowCb(GtkWidget* widget, GtkWidget* window)
+static void destroy_window(GtkWidget* widget, GtkWidget* window)
 {
   gtk_main_quit();
 }
 
-static gboolean closeWebViewCb(WebKitWebView* webView, GtkWidget* window)
+static gboolean close_window(WebKitWebView* web_view, GtkWidget* window)
 {
   gtk_widget_destroy(window);
   return TRUE;
@@ -138,40 +187,44 @@ static int scm_c_char_to_int(const char *char_name) {
   return scm_to_int(scm_char_to_integer(scm_c_eval_string(char_name)));
 }
 
-static gboolean keyPressWindowCb(GtkWidget* widget, GdkEventKey* event, gpointer userData)
+static gboolean key_press(GtkWidget* widget, GdkEventKey* event, gpointer user_data)
 {
   static guint32 last_unichar = 0;
+  guint32 unichar;
   GdkModifierType modifiers;
+  int mod_flags = 0;
 
   modifiers = gtk_accelerator_get_default_mod_mask();
-  int mod_flags = 0;
   if (event->state & modifiers & GDK_CONTROL_MASK)
     mod_flags |= EY_MODKEY_CONTROL;
 
   if (event->state & modifiers & GDK_SHIFT_MASK) 
     mod_flags |= EY_MODKEY_SHIFT;
 
-  if (event->state & modifiers & GDK_META_MASK)
-    printf("META key is held.\n");
-
-  if (event->state & modifiers & GDK_HYPER_MASK)
-    printf("HYPER key is held.\n");
-
-  if (event->state & modifiers & GDK_SUPER_MASK)
-    printf("SUPER key is held.\n");
-
   if (event->state & modifiers & GDK_MOD1_MASK)
     mod_flags |= EY_MODKEY_META;
 
-  guint32 unichar;
   unichar = gdk_keyval_to_unicode(event->keyval);
+
+  // Fix up any key values that don't translate perfectly.
+  if (event->keyval == GDK_KEY_BackSpace)
+    unichar = scm_c_char_to_int("#\\del");
+
+  // If unichar is 0 then it's not a regular key, e.g., Control, Meta, etc.
+
   if (event->type == GDK_KEY_PRESS) {
-    printf("Key press %d %s (unicode %d last_unichar %d)\n", event->keyval, event->string, unichar, last_unichar);
+    printf("Key press %d %s (unicode %d last_unichar %d)\n", 
+           event->keyval, event->string, unichar, last_unichar);
     // Fix up some keys.
-    if (event->keyval == GDK_KEY_BackSpace)
-      unichar = scm_c_char_to_int("#\\del");
     if (unichar) {
+      // Register the key event with Emacsy.
       emacsy_key_event(unichar, mod_flags);
+      /* 
+         One can do the event handling and the actual processing
+         separately in Emacsy.  However, in this case, it's convenient
+         to do some processing in the event handling here so we know
+         whether or not to pass the event on to the browser.
+       */
       int flags = emacsy_tick();
 
       printf("flags = %d\n", flags);
@@ -185,51 +238,73 @@ static gboolean keyPressWindowCb(GtkWidget* widget, GdkEventKey* event, gpointer
       }
     }
   } else if (event->type == GDK_KEY_RELEASE) {
-    printf("Key release %d %s (unicode %d last_unichar %d)\n", event->keyval, event->string, unichar, last_unichar);
+    /* 
+       We receive both key presses and key releases.  If we decide not
+       to pass a key event when pressed, then we remember it
+       (last_unichar) such that we squelch the key release event too.
+     */
+    printf("Key release %d %s (unicode %d last_unichar %d)\n", 
+           event->keyval, event->string, unichar, last_unichar);
     if (last_unichar && last_unichar == unichar) {
       last_unichar = 0;
-      return TRUE;
+      return TRUE; // Don't pass event to the browser.
     }
   }
-  return FALSE;
+  return FALSE; // Pass the event to the browser.
 }
 
-static gboolean idling(void *userData)
+/*
+  Process events in Emacsy then update the echo area at the bottom of the
+  screen.
+ */
+static gboolean process_and_update_emacsy(void *user_data)
 {
+  // Process events and any background coroutines.
   int flags = emacsy_tick();
+
+  // If there's been a request to quit, quit.
   if (flags & EY_QUIT_APPLICATION)
     gtk_main_quit();
 
+  // Update the status line. 
   const char *status = emacsy_message_or_echo_area();
-  //printf("status: %s\n", status);
+  // Use markup to style the status line.
   char *markup = g_markup_printf_escaped ("<span foreground=\"white\" background=\"black\" underline=\"single\"><tt>%s </tt></span>", status);
   gtk_label_set_markup(GTK_LABEL(label), markup);
   g_free(markup);
 
-  // Show the cursor.  Make it blink?
+  // Show the cursor.  Exercise for the reader: Make it blink.
   char message[255];
   memset(message, ' ', 254);
   message[255] = NULL;
   message[emacsy_minibuffer_point() - 1] = '_';
   gtk_label_set_pattern(GTK_LABEL(label), message);
-  return TRUE;
+
+  return TRUE;                  
 }
+
+/*
+  Scheme Primitives
+  =================
+  
+  These C functions are exposed as callable procedures in Scheme.
+*/
 
 SCM_DEFINE(scm_load_url, "load-url", 1, 0, 0,
            (SCM scm_url),
            "Loads a given URL into the WebView.")
 {
     const char *c_url = scm_to_locale_string(scm_url);
-    webkit_web_view_load_uri(webView, c_url);
-    return SCM_BOOL_F;
+    webkit_web_view_load_uri(web_view, c_url);
+    return SCM_UNSPECIFIED;
 }
 
 SCM_DEFINE(scm_webkit_forward, "webkit-forward", 0, 0, 0,
            (),
-           "Move WebKit forward.")
+           "Move browser forward.")
 {
-  if (webkit_web_view_can_go_forward(webView)) {
-    webkit_web_view_go_forward(webView);
+  if (webkit_web_view_can_go_forward(web_view)) {
+    webkit_web_view_go_forward(web_view);
     return SCM_BOOL_T;
   }
   return SCM_BOOL_F;
@@ -237,10 +312,10 @@ SCM_DEFINE(scm_webkit_forward, "webkit-forward", 0, 0, 0,
 
 SCM_DEFINE(scm_webkit_backward, "webkit-backward", 0, 0, 0,
            (),
-           "Move WebKit backward.")
+           "Move browser backward.")
 {
-  if (webkit_web_view_can_go_back(webView)) {
-    webkit_web_view_go_back(webView);
+  if (webkit_web_view_can_go_back(web_view)) {
+    webkit_web_view_go_back(web_view);
     return SCM_BOOL_T;
   }
   return SCM_BOOL_F;
@@ -248,32 +323,19 @@ SCM_DEFINE(scm_webkit_backward, "webkit-backward", 0, 0, 0,
 
 SCM_DEFINE(scm_webkit_reload, "webkit-reload", 0, 0, 0,
            (),
-           "Reload.")
+           "Reload browser.")
 {
-  webkit_web_view_reload(webView);
+  webkit_web_view_reload(web_view);
   return SCM_UNSPECIFIED;
 }
-
-/*
-SCM_DEFINE(scm_webkit_find, "webkit-find", 1, 0, 0,
-           (SCM text),
-           "Find this text.")
-{
-  const char *c_text = scm_to_locale_string(text);
-  WebKitFindController *find = webkit_web_view_get_find_controller(webView);
-  webkit_find_controller_search(find, c_text, WEBKIT_FIND_OPTIONS_CASE_INSENSITIVE | WEBKIT_FIND_OPTIONS_WRAP_AROUND, 10);
-  return SCM_UNSPECIFIED;
-}
-*/
 
 SCM_DEFINE(scm_webkit_find_next, "webkit-find-next", 1, 0, 0,
            (SCM text),
            "Find next.")
 {
   const char *c_text = scm_to_locale_string(text);
-  return scm_from_bool(webkit_web_view_search_text(webView, c_text, FALSE, TRUE, TRUE)); 
-  //return scm_from_bool(webkit_web_view_mark_text_matches(webView, c_text, FALSE, 0));
-  
+  return scm_from_bool(webkit_web_view_search_text(web_view, c_text, FALSE, TRUE, TRUE)); 
+  //return scm_from_bool(webkit_web_view_mark_text_matches(web_view, c_text, FALSE, 0));
 }
 
 SCM_DEFINE(scm_webkit_find_previous, "webkit-find-previous", 1, 0, 0,
@@ -281,20 +343,15 @@ SCM_DEFINE(scm_webkit_find_previous, "webkit-find-previous", 1, 0, 0,
            "Find previous.")
 {
   const char *c_text = scm_to_locale_string(text);
-  webkit_web_view_mark_text_matches(webView, c_text, FALSE, 0);
-  return scm_from_bool(webkit_web_view_search_text(webView, c_text, FALSE, FALSE, TRUE)); 
-  /* WebKitFindController *find = webkit_web_view_get_find_controller(webView); */
-  /* webkit_find_controller_search_previous(find); */
-  /* return SCM_UNSPECIFIED; */
+  webkit_web_view_mark_text_matches(web_view, c_text, FALSE, 0);
+  return scm_from_bool(webkit_web_view_search_text(web_view, c_text, FALSE, FALSE, TRUE)); 
 }
 
 SCM_DEFINE(scm_webkit_find_finish, "webkit-find-finish", 0, 0, 0,
            (),
            "Find previous.")
 {
-  /* WebKitFindController *find = webkit_web_view_get_find_controller(webView); */
-  /* webkit_find_controller_search_finish(find); */
-  webkit_web_view_unmark_text_matches(webView);
+  webkit_web_view_unmark_text_matches(web_view);
   return SCM_UNSPECIFIED;
 }
 
@@ -302,7 +359,7 @@ SCM_DEFINE(scm_webkit_zoom_in, "webkit-zoom-in", 0, 0, 0,
            (),
            "Zoom in.")
 {
-  webkit_web_view_zoom_in(webView);
+  webkit_web_view_zoom_in(web_view);
   return SCM_UNSPECIFIED;
 }
 
@@ -310,13 +367,15 @@ SCM_DEFINE(scm_webkit_zoom_out, "webkit-zoom-out", 0, 0, 0,
            (),
            "Zoom out.")
 {
-  webkit_web_view_zoom_out(webView);
+  webkit_web_view_zoom_out(web_view);
   return SCM_UNSPECIFIED;
 }
 
-
-
-#if 0
+/* 
+   I was going to try and get fancy with some javascript evaluation,
+   but I didn't succeed.
+ */
+/*
 static void
 web_view_javascript_finished (GObject      *object,
                               GAsyncResult *result,
@@ -327,7 +386,8 @@ web_view_javascript_finished (GObject      *object,
     JSGlobalContextRef      context;
     GError                 *error = NULL;
 
-    js_result = webkit_web_view_run_javascript_finish (WEBKIT_WEB_VIEW (object), result, &error);
+    js_result = webkit_web_view_run_javascript_finish (WEBKIT_WEB_VIEW (object), 
+                                                       result, &error);
     if (!js_result) {
         g_warning ("Error running javascript: %s", error->message);
         g_error_free (error);
@@ -363,13 +423,19 @@ SCM_DEFINE(scm_webkit_eval_javascript, "webkit-eval-javascript", 2, 0, 0,
            "Reload.")
 {
   const char *c_script = scm_to_locale_string(script);
-  webkit_web_view_run_javascript(webView, c_script, NULL, web_view_javascript_finished, scm_is_true(proc) ? proc : NULL);
+  webkit_web_view_run_javascript(web_view, c_script, NULL, 
+                                 web_view_javascript_finished, 
+                                 scm_is_true(proc) ? proc : NULL);
   return SCM_UNSPECIFIED;
 }
-#endif // 0
+*/
 
 static void init_primitives(void)
 {
+/*
+  We use guile-snarf to generate main.c.x that helps us register the C
+  functions as Scheme procedures.
+*/
 #ifndef SCM_MAGIC_SNARFER
 #include "main.c.x"
 #endif
