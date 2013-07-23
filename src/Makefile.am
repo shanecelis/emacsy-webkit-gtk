@@ -5,6 +5,8 @@ CLEANFILES=main.c.x
 
 bin_PROGRAMS = emacsy-webkit-gtk
 
+EXTRA_DIST = emacsy-webkit-gtk.scm
+
 AM_CFLAGS  = $(EMACSY_CFLAGS) $(GUILE_CFLAGS) $(WEBKIT_CFLAGS)
 emacsy_webkit_gtk_LDADD   = $(EMACSY_LIBS) $(GUILE_LIBS) $(WEBKIT_LIBS)
 emacsy_webkit_gtk_LDFLAGS = 
