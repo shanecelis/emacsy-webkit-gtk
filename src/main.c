@@ -1,3 +1,4 @@
+
 /* main.c
 
    This example program demonstrates how to embed Emacsy into a
@@ -34,6 +35,7 @@
  */
 #ifndef SCM_MAGIC_SNARFER
 #include <gtk/gtk.h>
+#include <gdk/gdk.h>
 #include <gdk/gdkkeysyms.h>
 #include <webkit/webkit.h>
 #include <JavaScriptCore/JavaScript.h>
@@ -45,21 +47,24 @@
 static void destroy_window(GtkWidget* widget, GtkWidget* window);
 static gboolean close_window(WebKitWebView* webView, GtkWidget* window);
 static gboolean key_press(GtkWidget* widget, GdkEventKey* event, gpointer user_data);
-static gboolean update_echo_area(void *user_data);
+static gboolean process_and_update_emacsy(void *user_data);
 
 /* Registers the Scheme primitive procedures */
 static void init_primitives(void); 
 
 /* Scheme Primitives */
-SCM scm_load_url(SCM url);
+SCM scm_webkit_load_url(SCM url);
+
+
+
 SCM scm_webkit_forward();
 SCM scm_webkit_backward();
 SCM scm_webkit_reload();
-SCM scm_webkit_find_next();
-SCM scm_webkit_find_previous();
+SCM scm_webkit_find_next(SCM text);
+SCM scm_webkit_find_previous(SCM text);
 SCM scm_webkit_find_finish();
-SCM scm_webkit_find_zoom_in();
-SCM scm_webkit_find_zoom_out();
+SCM scm_webkit_zoom_in();
+SCM scm_webkit_zoom_out();
 //SCM scm_webkit_eval_javascript(SCM script, SCM when_finished_proc);
 
 /* Global state */
@@ -83,21 +88,25 @@ int main(int argc, char* argv[])
   init_primitives();  
 
   // You can evaluate S-expressions here.
-  scm_c_eval_string(
-"(define (safe-load filename)     "
-"  (call-with-error-handling      "
-"    (lambda () (load filename))))");
+  scm_c_eval_string("(use-modules (system repl error-handling))"
+                    "(define (safe-load filename)              "
+                    "  (call-with-error-handling               "
+                    "    (lambda () (load filename))))         ");
 
   // But to make the application easy to mold, it's best to load the
   // Scheme code from a file.
-  if (access(".emacsy-webkit-gtk", R_OK) != -1) {
-    // We could load the file like this:
+  const char *startup_script = "emacsy-webkit-gtk.scm";
+  if (access(startup_script, R_OK) != -1) {
+    printf("Loading '%s'.\n", startup_script);
 
+    // We could load the file like this:
     //scm_c_primitive_load(".emacy-webkit-gtk.scm");
 
     // But this will drop us into a REPL if anything goes wrong.
     scm_call_1(scm_c_private_ref("guile-user", "safe-load"),
-               scm_from_locale_string(".emacsy-webkit-gtk"));
+               scm_from_locale_string(startup_script));
+  } else {
+    printf("Did not find '%s'.\n", startup_script);
   }
 
   // Initialize GTK+.
@@ -106,7 +115,15 @@ int main(int argc, char* argv[])
   // Create an 800x600 window that will contain the browser instance.
   GtkWidget *main_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_default_size(GTK_WINDOW(main_window), 800, 600);
-
+  //gtk_window_set_size(GTK_WINDOW(main_window), 800, 600);
+  
+  GdkGeometry geom_struct;
+  geom_struct.max_width = 800;
+  geom_struct.max_height = 600;
+  gtk_window_set_geometry_hints(GTK_WINDOW(main_window),
+                                NULL,
+                                &geom_struct,
+                                GDK_HINT_MAX_SIZE);
   /* you might need to use GTK_STATE_ACTIVE or GTK_STATE_PRELIGHT */
   GdkColor black = {0, 0x0, 0x0, 0x0};
   GdkColor white = {0, 0xFFFF, 0xFFFF, 0xFFFF};
@@ -132,7 +149,9 @@ int main(int argc, char* argv[])
   label = gtk_label_new("label");
   gtk_misc_set_alignment(GTK_MISC(label), 0.0f, 0.0f);
   gtk_label_set_use_underline(GTK_LABEL(label), FALSE);
+  gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
   gtk_label_set_single_line_mode(GTK_LABEL(label), TRUE);
+  gtk_label_set_max_width_chars(GTK_LABEL(label), 160);
 
   // While idle, process events in Emacsy and upate the echo-area.
   g_idle_add((GSourceFunc) process_and_update_emacsy, NULL);
@@ -159,6 +178,7 @@ int main(int argc, char* argv[])
 
   // Make sure the main window and all its contents are visible.
   gtk_widget_show_all(main_window);
+  gtk_window_set_resizable(GTK_WINDOW(main_window), FALSE);
 
   // Run the main GTK+ event loop.
   gtk_main();
@@ -200,6 +220,9 @@ static gboolean key_press(GtkWidget* widget, GdkEventKey* event, gpointer user_d
 
   if (event->state & modifiers & GDK_SHIFT_MASK) 
     mod_flags |= EY_MODKEY_SHIFT;
+
+  if (event->state & modifiers & GDK_SUPER_MASK) 
+    mod_flags |= EY_MODKEY_SUPER;
 
   if (event->state & modifiers & GDK_MOD1_MASK)
     mod_flags |= EY_MODKEY_META;
@@ -290,7 +313,7 @@ static gboolean process_and_update_emacsy(void *user_data)
   These C functions are exposed as callable procedures in Scheme.
 */
 
-SCM_DEFINE(scm_load_url, "load-url", 1, 0, 0,
+SCM_DEFINE(scm_webkit_load_url, "webkit-load-url", 1, 0, 0,
            (SCM scm_url),
            "Loads a given URL into the WebView.")
 {
