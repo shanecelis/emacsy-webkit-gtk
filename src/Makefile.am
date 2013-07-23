@@ -1,5 +1,6 @@
 .SECONDARY:
 
+if ENABLE_WEBKIT
 CLEANFILES=main.c.x 
 
 bin_PROGRAMS = emacsy-webkit-gtk
@@ -17,3 +18,6 @@ include $(top_srcdir)/support/automake/guile.am
 
 run-local: emacsy-webkit-gtk
 	$(ENV) ./emacsy-webkit-gtk
+else
+		$(warning Warning: WEBKIT not found; can't build demo.)
+endif
