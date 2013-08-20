@@ -69,9 +69,9 @@ SCM scm_webkit_zoom_out();
 
 /* Global state */
 GtkWidget *label;               /* Shows Emacsy's echo area or minibuffer */
-GtkWidget *modeline;               /* Shows Emacsy's echo area or minibuffer */
+GtkWidget *modeline;            /* Shows Emacsy's modeline */
 WebKitWebView *web_view;        /* The WebKit browser */
-
+GtkWidget *scrolled_window;
 /*
   Create a minimal web browser that has Emacsy integrated into it.
  */
@@ -96,7 +96,7 @@ int main(int argc, char* argv[])
 
   // But to make the application easy to mold, it's best to load the
   // Scheme code from a file.
-  const char *startup_script = "emacsy-webkit-gtk.scm";
+  const char *startup_script = "emacsy-webkit-gtk-w-buffers.scm";
   if (access(startup_script, R_OK) != -1) {
     printf("Loading '%s'.\n", startup_script);
 
@@ -132,19 +132,22 @@ int main(int argc, char* argv[])
   gtk_widget_modify_fg(GTK_WINDOW(main_window), GTK_STATE_NORMAL, &white);
 
   // Create a browser instance
-  web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
-  webkit_web_view_set_highlight_text_matches(web_view, TRUE);
+  /* web_view = WEBKIT_WEB_VIEW(webkit_web_view_new()); */
+  /* webkit_web_view_set_highlight_text_matches(web_view, TRUE); */
+  web_view = NULL;
 
   // Create a scrollable area, and put the browser instance into it
-  GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
+  scrolled_window = gtk_scrolled_window_new(NULL, NULL);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),
                                  GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-  gtk_container_add(GTK_CONTAINER(scrolled_window), GTK_WIDGET(web_view));
+  scm_c_eval_string("(new-tab)");
+  //gtk_container_add(GTK_CONTAINER(scrolled_window), GTK_WIDGET(web_view));
 
   // Set up callbacks so that if either the main window or the browser
   // instance is closed, the program will exit.
   g_signal_connect(main_window, "destroy", G_CALLBACK(destroy_window), NULL);
-  g_signal_connect(web_view, "close-web-view", G_CALLBACK(close_window), main_window);
+  //g_signal_connect(web_view, "close-web-view", G_CALLBACK(close_window), main_window);
+
 
   // This label will be where we display Emacsy's echo-area.
   label = gtk_label_new("label");
@@ -153,6 +156,14 @@ int main(int argc, char* argv[])
   gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
   gtk_label_set_single_line_mode(GTK_LABEL(label), TRUE);
   gtk_label_set_max_width_chars(GTK_LABEL(label), 160);
+
+  modeline = gtk_label_new("modeline");
+  gtk_misc_set_alignment(GTK_MISC(modeline), 0.0f, 0.0f);
+  gtk_label_set_use_underline(GTK_LABEL(modeline), FALSE);
+  gtk_label_set_line_wrap(GTK_LABEL(modeline), TRUE);
+  gtk_label_set_single_line_mode(GTK_LABEL(modeline), TRUE);
+  gtk_label_set_max_width_chars(GTK_LABEL(modeline), 160);
+
 
   // While idle, process events in Emacsy and upate the echo-area.
   g_idle_add((GSourceFunc) process_and_update_emacsy, NULL);
@@ -164,10 +175,12 @@ int main(int argc, char* argv[])
   GtkWidget *vbox;
   vbox = gtk_vbox_new(FALSE, 1);
   gtk_container_add(GTK_CONTAINER(vbox), scrolled_window);
+  gtk_box_pack_start(GTK_BOX(vbox), modeline, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
 
   // Put the scrollable area into the main window.
   gtk_container_add(GTK_CONTAINER(main_window), vbox);
+
 
   // Load a web page into the browser instance.
   webkit_web_view_load_uri(web_view, 
@@ -291,10 +304,15 @@ static gboolean process_and_update_emacsy(void *user_data)
     gtk_main_quit();
 
   // Update the status line. 
+  const char *modeline_string = emacsy_mode_line();
   const char *status = emacsy_message_or_echo_area();
   // Use markup to style the status line.
   char *markup = g_markup_printf_escaped ("<span foreground=\"white\" background=\"black\" underline=\"single\"><tt>%s </tt></span>", status);
   gtk_label_set_markup(GTK_LABEL(label), markup);
+  g_free(markup);
+
+  markup = g_markup_printf_escaped ("<span foreground=\"white\" background=\"black\" underline=\"none\"><tt>%s </tt></span>", modeline_string);
+  gtk_label_set_markup(GTK_LABEL(modeline), markup);
   g_free(markup);
 
   // Show the cursor.  Exercise for the reader: Make it blink.
@@ -314,11 +332,31 @@ static gboolean process_and_update_emacsy(void *user_data)
   These C functions are exposed as callable procedures in Scheme.
 */
 
+SCM_DEFINE(scm_set_web_view_x, "set-web-view!", 1, 0, 0,
+           (SCM web_view_pointer),
+           "Set the current web view to the given pointer.")
+{
+  if (scm_is_true(scm_pointer_p(web_view_pointer))) {
+    // Remove the current one from the window.
+    if (web_view)
+      gtk_container_remove(GTK_CONTAINER(scrolled_window), GTK_WIDGET(web_view));
+    web_view = WEBKIT_WEB_VIEW(scm_to_pointer(web_view_pointer));
+    gtk_container_add(GTK_CONTAINER(scrolled_window), GTK_WIDGET(web_view));
+    gtk_widget_show_all(GTK_WIDGET(web_view));
+    //gtk_widget_grab_focus(GTK_WIDGET(web_view));
+  } else {
+    fprintf(stderr, "error: not given a pointer in set-web-view!\n");
+  }
+  return SCM_UNSPECIFIED;
+}
+
 SCM_DEFINE(scm_make_web_view, "make-web-view", 0, 0, 0,
            (),
            "Creates and returns a pointer to a new webkit view.")
 {
-  return scm_from_pointer(WEBKIT_WEB_VIEW(webkit_web_view_new()), g_free);
+  WebKitWebView *a_web_view = WEBKIT_WEB_VIEW(webkit_web_view_new());
+  a_web_view = g_object_ref(a_web_view);
+  return scm_from_pointer(a_web_view, /*g_free*/ NULL);
 }
 
 SCM_DEFINE(scm_webkit_load_url, "webkit-load-url", 1, 0, 0,
@@ -468,7 +506,7 @@ static void init_primitives(void)
   functions as Scheme procedures.
 */
 #ifndef SCM_MAGIC_SNARFER
-#include "main.c.x"
+#include "emacsy-webkit-gtk-w-buffers.c.x"
 #endif
 }
 

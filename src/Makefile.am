@@ -24,6 +24,8 @@ emacsy_webkit_gtk_w_buffers_SOURCES = emacsy-webkit-gtk-w-buffers.c
 
 main.o : main.c.x
 
+emacsy-webkit-gtk-w-buffers.o : emacsy-webkit-gtk-w-buffers.c.x
+
 include $(top_srcdir)/support/automake/guile.am
 
 MAINTAINERCLEANFILES = Makefile.in config.h.in 
