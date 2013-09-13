@@ -1,8 +1,25 @@
 ;; .emacsy-webkit-gtk.scm
 ;;
 ;; Here's where the fun begins.
-(use-modules (srfi srfi-1) ;; any
-             )
+
+(use-modules (oop goops)
+             (emacsy window))
+
+(format #t "current module ~a~%" (current-module))
+(message "Here I am!")
+(set! root-window (make <window> #:window-buffer messages))
+
+(define-interactive (new-tab)
+  (define (on-enter)
+    (when (local-var 'web-view)
+      (format #t "Setting web-view to ~a~%" (local-var 'web-view))
+      (set-web-view! (local-var 'web-view))))
+  (let ((buffer (switch-to-buffer "*new-tab*")))
+    (set! (local-var 'web-view) (make-web-view))
+    (add-hook! (buffer-enter-hook buffer)
+               on-enter)
+    (on-enter)
+    (load-url "http://google.com")))
 
 (define-interactive 
   (load-url #:optional 
@@ -14,6 +31,7 @@
 (define-interactive 
   (goto #:optional
         (urlish (read-from-minibuffer "GOTO: ")))
+  (set-buffer-name! urlish)
   (cond
    ((string-prefix? "http://" urlish)
     (load-url urlish))
@@ -27,12 +45,7 @@
     ;; It's just one word.  Let's try adding a .com and http:// if it
     ;; needs it.
     (load-url (format #f "http://~a~a" urlish 
-                      (if (any (lambda (suffix) 
-                                 (string-suffix? suffix urlish))
-                               '(".com" ".org" ".net"))
-                          ""
-                          
-                          ".com"))))))
+                      (if (string-suffix? ".com" urlish) "" ".com"))))))
 
 (define-interactive (go-forward)
   (webkit-forward))
@@ -62,6 +75,19 @@
   (set! find-text text)
   (webkit-find-previous text))
 
+(define (instantiate-root-window)
+  (instantiate-window (make <window> #:window-buffer messages) #;root-window))
+
+(define-method (instantiate-window (window <window>))
+  (let ((buffer (window-buffer window)))
+    (create-web-view-window window buffer (is-a? buffer <text-buffer>))))
+
+(define-method (instantiate-window (window <internal-window>))
+  (create-vertical-window (map instantiate-window (window-children window)))
+  #;(if (eq? (orientation window) 'vertical)
+      (create-vertical-window (map instantiate-window (window-children window)))
+      (create-horizontal-window (map instantiate-window (window-children window)))))
+
 ;; Now let's bind these to some keys.
 
 (define-key global-map (kbd "M-g") 'goto)
@@ -71,3 +97,5 @@
 (define-key global-map (kbd "s-b") 'go-back)
 (define-key global-map (kbd "C-s") 'search-forward)
 (define-key global-map (kbd "C-r") 'search-backward)
+
+(export instantiate-window instantiate-root-window)

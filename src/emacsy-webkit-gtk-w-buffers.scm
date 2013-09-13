@@ -1,8 +1,9 @@
 ;; .emacsy-webkit-gtk.scm
 ;;
 ;; Here's where the fun begins.
-
-(use-modules (oop goops))
+(use-modules (oop goops)
+             (srfi srfi-1) ;;any
+             )
 
 (define-interactive (new-tab)
   (define (on-enter)
@@ -40,7 +41,11 @@
     ;; It's just one word.  Let's try adding a .com and http:// if it
     ;; needs it.
     (load-url (format #f "http://~a~a" urlish 
-                      (if (string-suffix? ".com" urlish) "" ".com"))))))
+                      (if (any (lambda (suffix) 
+                                 (string-suffix? suffix urlish))
+                               '(".com" ".org" ".net"))
+                          ""
+                          ".com"))))))
 
 (define-interactive (go-forward)
   (webkit-forward))
