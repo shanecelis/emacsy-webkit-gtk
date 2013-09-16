@@ -89,6 +89,7 @@
 ;; For some reason, I can't refer to record-types in C without first
 ;; referring to them in Scheme. The record accesses are inlined
 ;; apparently.  Seems like a Guile bug to me.
+(define window-user-data?2 window-user-data?)
 (define make-window-user-data2 make-window-user-data)
 (define wud-widget2 wud-widget)
 (define wud-modeline2 wud-modeline)
@@ -113,8 +114,8 @@
 
 (define (instantiate-root-window)
   ;(set! root-window (make <window> #:window-buffer messages))
-  ;(instantiate-window root-window)
-  (instantiate-window current-window)
+  (instantiate-window root-window)
+  ;(instantiate-window current-window)
   )
 
 (define-method (instantiate-window (window <window>))
@@ -137,4 +138,4 @@
 (define-key global-map (kbd "C-s") 'search-forward)
 (define-key global-map (kbd "C-r") 'search-backward)
 
-(export instantiate-window instantiate-root-window <window-user-data> make-window-user-data2 wud-widget2 wud-web-view wud-modeline window-user-data? redisplay redisplay-windows)
+(export instantiate-window instantiate-root-window <window-user-data> make-window-user-data2 wud-widget2 wud-web-view wud-modeline window-user-data? window-user-data?2 redisplay redisplay-windows)

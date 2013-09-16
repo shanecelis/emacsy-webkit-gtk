@@ -200,9 +200,9 @@ int main(int argc, char* argv[])
   /* gtk_container_add(GTK_CONTAINER(vbox), scrolled_window); */
 
   /* gtk_box_pack_start(GTK_BOX(vbox), modeline, FALSE, FALSE, 0); */
-  SCM record = scm_call_0(scm_c_public_ref("guile-user", "instantiate-root-window"));
-  SCM widget_pointer = scm_call_1(scm_c_public_ref("guile-user", "wud-widget2"), record);
-  //SCM widget_pointer = scm_call_0(scm_c_public_ref("guile-user", "instantiate-root-window"));
+  //SCM record = scm_call_0(scm_c_public_ref("guile-user", "instantiate-root-window"));
+  //SCM widget_pointer = scm_call_1(scm_c_public_ref("guile-user", "wud-widget2"), record);
+  SCM widget_pointer = scm_call_0(scm_c_public_ref("guile-user", "instantiate-root-window"));
   gtk_container_add(GTK_CONTAINER(vbox), 
                     GTK_WIDGET(scm_to_pointer(widget_pointer)));
 
@@ -576,9 +576,9 @@ SCM_DEFINE(scm_create_vertical_window, "create-vertical-window", 1, 0, 0,
   GtkWidget *vbox;
   vbox = gtk_vbox_new(FALSE, 1);
 
-  for (; ! scm_null_p(list); list = scm_cdr(list)) {
+  for (; ! scm_is_null(list); list = scm_cdr(list)) {
     SCM pointer = scm_car(list);
-    if (scm_call_1(scm_c_public_ref("guile-user", "window-user-data?"),
+    if (scm_call_1(scm_c_public_ref("guile-user", "window-user-data?2"),
                    pointer)) {
       pointer = scm_call_1(scm_c_public_ref("guile-user", "wud-widget2"),
                            pointer);
@@ -589,6 +589,7 @@ SCM_DEFINE(scm_create_vertical_window, "create-vertical-window", 1, 0, 0,
       fprintf(stderr, "warning: got a non-pointer for create-vertical-window.");
     }
   }
+  gtk_widget_show_all(GTK_WIDGET(vbox));
   return scm_from_pointer(vbox, NULL);
 }
 
