@@ -3,11 +3,14 @@
 ;; Here's where the fun begins.
 
 (use-modules (oop goops)
-             (emacsy window))
+             (emacsy window)
+             (srfi srfi-9) ;; record
+             )
 
 (format #t "current module ~a~%" (current-module))
 (message "Here I am!")
-(set! root-window (make <window> #:window-buffer messages))
+(set! current-window (make <window> #:window-buffer messages))
+(set! root-window (make <internal-window> #:window-children (list current-window)))
 
 (define-interactive (new-tab)
   (define (on-enter)
@@ -75,8 +78,44 @@
   (set! find-text text)
   (webkit-find-previous text))
 
+
+(define-record-type <window-user-data>
+  (make-window-user-data widget web-view modeline)
+  window-user-data?
+  (widget wud-widget)
+  (web-view wud-web-view)
+  (modeline wud-modeline))
+
+;; For some reason, I can't refer to record-types in C without first
+;; referring to them in Scheme. The record accesses are inlined
+;; apparently.  Seems like a Guile bug to me.
+(define make-window-user-data2 make-window-user-data)
+(define wud-widget2 wud-widget)
+(define wud-modeline2 wud-modeline)
+
+(define-method (redisplay (window <window>))
+  (let* ((buffer (window-buffer window))
+         (userdata (user-data window)))
+    (when (and buffer (window-user-data? userdata))
+      ;(format #t "redisplaying window ~a with buffer ~a~%" window buffer)
+      (web-view-load-string (wud-web-view userdata)
+                            (buffer-string buffer))
+      (update-label! (wud-modeline userdata)
+                     (emacsy-mode-line buffer)))))
+
+(define-method (redisplay (window <internal-window>))
+  (for-each redisplay (window-children window)))
+
+(define (redisplay-windows)
+  (redisplay root-window)
+  #;(for-each redisplay
+            (window-list)))
+
 (define (instantiate-root-window)
-  (instantiate-window (make <window> #:window-buffer messages) #;root-window))
+  ;(set! root-window (make <window> #:window-buffer messages))
+  ;(instantiate-window root-window)
+  (instantiate-window current-window)
+  )
 
 (define-method (instantiate-window (window <window>))
   (let ((buffer (window-buffer window)))
@@ -98,4 +137,4 @@
 (define-key global-map (kbd "C-s") 'search-forward)
 (define-key global-map (kbd "C-r") 'search-backward)
 
-(export instantiate-window instantiate-root-window)
+(export instantiate-window instantiate-root-window <window-user-data> make-window-user-data2 wud-widget2 wud-web-view wud-modeline window-user-data? redisplay redisplay-windows)
