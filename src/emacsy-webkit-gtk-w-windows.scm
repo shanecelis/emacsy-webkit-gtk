@@ -12,7 +12,6 @@
 
 (define-class <web-buffer> (<buffer>)
   ;(buffer-webkit #:accessor buffer-webkit #:init-form (make-web-view))
-  
   )
 
 (define-method (emacsy-mode-line (buffer <web-buffer>))
