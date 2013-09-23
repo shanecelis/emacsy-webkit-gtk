@@ -9,20 +9,38 @@
 
 (format #t "current module ~a~%" (current-module))
 (message "Here I am!")
-(set! current-window (make <window> #:window-buffer messages))
-(set! root-window (make <internal-window> #:window-children (list current-window)))
 
-(define-interactive (new-tab)
-  (define (on-enter)
-    (when (local-var 'web-view)
-      (format #t "Setting web-view to ~a~%" (local-var 'web-view))
-      (set-web-view! (local-var 'web-view))))
-  (let ((buffer (switch-to-buffer "*new-tab*")))
-    (set! (local-var 'web-view) (make-web-view))
-    (add-hook! (buffer-enter-hook buffer)
-               on-enter)
-    (on-enter)
-    (load-url "http://google.com")))
+(define-class <web-buffer> (<buffer>)
+  ;(buffer-webkit #:accessor buffer-webkit #:init-form (make-web-view))
+  
+  )
+
+(define-method (emacsy-mode-line (buffer <web-buffer>))
+  (format #f "~a~/~a~/~a" (next-method) (webkit-get-title) (webkit-get-url)))
+
+(define-class <gtk-window> (<window>)
+  (last-buffer-modified-tick #:accessor last-buffer-modified-tick #:init-value -1))
+
+(define-method (needs-redisplay? (window <gtk-window>))
+  (let* ((buffer (window-buffer window))
+         (buffer-tick (buffer-modified-tick buffer))
+         (window-tick (last-buffer-modified-tick window)))
+    (not (= buffer-tick window-tick))))
+
+(define-method (redisplayed! (window <gtk-window>))
+  (let* ((buffer (window-buffer window))
+         (buffer-tick (buffer-modified-tick buffer)))
+    (set! (last-buffer-modified-tick window) buffer-tick)))
+
+(define-method (window-clone (window <gtk-window>))
+  (let ((new-window (next-method)))
+    (set! (user-data new-window) #f)
+    (set! (last-buffer-modified-tick new-window) -1)
+    new-window))
+
+(set! buffer-classes (list <web-buffer>))
+(set! current-window (make <gtk-window> #:window-buffer messages))
+(set! root-window (make <internal-window> #:window-children (list current-window)))
 
 (define-interactive 
   (load-url #:optional 
@@ -34,7 +52,7 @@
 (define-interactive 
   (goto #:optional
         (urlish (read-from-minibuffer "GOTO: ")))
-  (set-buffer-name! urlish)
+  ;(set-buffer-name! urlish)
   (cond
    ((string-prefix? "http://" urlish)
     (load-url urlish))
@@ -60,7 +78,7 @@
   (webkit-reload))
 
 (define-interactive (reload-script)
-  (load ".emacsy-webkit-gtk.scm"))
+  (load ".emacsy-webkit-gtk-w-windows.scm"))
 
 (define find-text #f)
 
@@ -78,7 +96,6 @@
   (set! find-text text)
   (webkit-find-previous text))
 
-
 (define-record-type <window-user-data>
   (make-window-user-data widget web-view modeline)
   window-user-data?
@@ -94,36 +111,64 @@
 (define wud-widget2 wud-widget)
 (define wud-modeline2 wud-modeline)
 
+(define (current-web-view)
+  (let ((wud (user-data current-window)))
+    (if (window-user-data? wud)
+        (wud-web-view wud)
+        #f)))
+
+
+;; (define (gtk-after-change buffer)
+;;   (set! (local-var 'needs-redisplay?) #t))
+
+;; (add-hook! after-buffer-change-hook gtk-after-change)
+
 (define-method (redisplay (window <window>))
   (let* ((buffer (window-buffer window))
          (userdata (user-data window)))
-    (when (and buffer (window-user-data? userdata))
+    (when (and buffer 
+               (window-user-data? userdata))
       ;(format #t "redisplaying window ~a with buffer ~a~%" window buffer)
-      (web-view-load-string (wud-web-view userdata)
-                            (buffer-string buffer))
+      
       (update-label! (wud-modeline userdata)
-                     (emacsy-mode-line buffer)))))
+                     (emacsy-mode-line buffer)
+                     (eq? window (selected-window)))
+      (when (needs-redisplay? window)
+        (cond
+         ((is-a? buffer <text-buffer>)
+          
+          (web-view-load-string (wud-web-view userdata)
+                                (buffer-string buffer)))
+         (else
+          (web-view-load-string (wud-web-view userdata)
+                                "")))
+        
+        (redisplayed! window)))))
 
 (define-method (redisplay (window <internal-window>))
   (for-each redisplay (window-children window)))
 
 (define (redisplay-windows)
-  (redisplay root-window)
-  #;(for-each redisplay
-            (window-list)))
+  (redisplay root-window))
 
 (define (instantiate-root-window)
-  ;(set! root-window (make <window> #:window-buffer messages))
-  (instantiate-window root-window)
-  ;(instantiate-window current-window)
-  )
+  (instantiate-window root-window))
+
+(define (gtk-window-configuration-change internal-window)
+  (set-window-content! (instantiate-root-window)))
+
+(define-interactive (test-window-change)
+  (gtk-window-configuration-change #f))
+
+(add-hook! window-configuration-change-hook gtk-window-configuration-change)
 
 (define-method (instantiate-window (window <window>))
   (let ((buffer (window-buffer window)))
     (create-web-view-window window buffer (is-a? buffer <text-buffer>))))
 
 (define-method (instantiate-window (window <internal-window>))
-  (create-vertical-window (map instantiate-window (window-children window)))
+  (create-gtk-window (map instantiate-window (window-children window))
+                     (eq? (orientation window) 'vertical))
   #;(if (eq? (orientation window) 'vertical)
       (create-vertical-window (map instantiate-window (window-children window)))
       (create-horizontal-window (map instantiate-window (window-children window)))))
@@ -138,4 +183,4 @@
 (define-key global-map (kbd "C-s") 'search-forward)
 (define-key global-map (kbd "C-r") 'search-backward)
 
-(export instantiate-window instantiate-root-window <window-user-data> make-window-user-data2 wud-widget2 wud-web-view wud-modeline window-user-data? window-user-data?2 redisplay redisplay-windows)
+(export instantiate-window instantiate-root-window <window-user-data> make-window-user-data2 wud-widget2 wud-web-view wud-modeline window-user-data? window-user-data?2 redisplay redisplay-windows current-web-view)

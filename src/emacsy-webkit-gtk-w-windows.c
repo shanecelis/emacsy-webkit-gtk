@@ -64,14 +64,15 @@ SCM scm_webkit_zoom_in();
 SCM scm_webkit_zoom_out();
 SCM scm_current_web_view();
 WebKitWebView *scm_c_current_web_view();
+SCM scm_get_gtk_widget(SCM);
+GtkWidget* scm_c_get_gtk_widget(SCM);
 //SCM scm_webkit_eval_javascript(SCM script, SCM when_finished_proc);
 
 /* Global state */
 GtkWidget *label;               /* Shows Emacsy's echo area or minibuffer */
-GtkWidget *modeline;            /* Shows Emacsy's modeline */
-WebKitWebView *web_view;        /* The WebKit browser */
-WebKitWebView *web_view_2;        /* The WebKit browser */
-GtkWidget *scrolled_window;
+GtkWidget *content_vbox;
+GtkWidget *content;
+
 /*
   Create a minimal web browser that has Emacsy integrated into it.
  */
@@ -133,43 +134,9 @@ int main(int argc, char* argv[])
   gtk_widget_modify_bg(GTK_WINDOW(main_window), GTK_STATE_NORMAL, &black);
   gtk_widget_modify_fg(GTK_WINDOW(main_window), GTK_STATE_NORMAL, &white);
 
-  // Create a browser instance
-  /* web_view = WEBKIT_WEB_VIEW(webkit_web_view_new()); */
-  /* webkit_web_view_set_highlight_text_matches(web_view, TRUE); */
-  web_view = NULL;
-
-  // Create a scrollable area, and put the browser instance into it
-  scrolled_window = gtk_scrolled_window_new(NULL, NULL);
-  GtkWidget *old_scrolled_window;
-
-  old_scrolled_window = gtk_scrolled_window_new(NULL, NULL);
-
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),
-                                 GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-
-  // This is where the web_view is set.
-  //scm_c_eval_string("(new-tab)");
-  //web_view_2 = web_view;
-  //scm_c_eval_string("(new-tab)");
-
-  scrolled_window = gtk_scrolled_window_new(NULL, NULL);
-
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(old_scrolled_window),
-                                 GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-
-  //scm_c_eval_string("(new-tab)");
-
-  //gtk_widget_reparent(GTK_WIDGET(web_view), GTK_CONTAINER(scrolled_window)); 
-  //gtk_scrolled_window_add_with_viewport(GTK_CONTAINER(scrolled_window), GTK_WIDGET(web_view));
-  //gtk_container_add(GTK_CONTAINER(scrolled_window), GTK_WIDGET(web_view));
-  //gtk_container_add(GTK_CONTAINER(old_scrolled_window), GTK_WIDGET(web_view_2));
-  //gtk_widget_show_all(GTK_WIDGET(web_view));
-  //gtk_widget_show_all(GTK_WIDGET(web_view_2));
   // Set up callbacks so that if either the main window or the browser
   // instance is closed, the program will exit.
   g_signal_connect(main_window, "destroy", G_CALLBACK(destroy_window), NULL);
-  //g_msignal_connect(web_view, "close-web-view", G_CALLBACK(close_window), main_window);
-
 
   // This label will be where we display Emacsy's echo-area.
   label = gtk_label_new("label");
@@ -179,12 +146,6 @@ int main(int argc, char* argv[])
   gtk_label_set_single_line_mode(GTK_LABEL(label), TRUE);
   gtk_label_set_max_width_chars(GTK_LABEL(label), 160);
 
-  modeline = gtk_label_new("modeline");
-  gtk_misc_set_alignment(GTK_MISC(modeline), 0.0f, 0.0f);
-  gtk_label_set_use_underline(GTK_LABEL(modeline), FALSE);
-  gtk_label_set_line_wrap(GTK_LABEL(modeline), TRUE);
-  gtk_label_set_single_line_mode(GTK_LABEL(modeline), TRUE);
-  gtk_label_set_max_width_chars(GTK_LABEL(modeline), 160);
 
 
   // While idle, process events in Emacsy and upate the echo-area.
@@ -193,24 +154,25 @@ int main(int argc, char* argv[])
   // Handle key press and release events.
   g_signal_connect(main_window, "key_press_event", G_CALLBACK(key_press), NULL);
   g_signal_connect(main_window, "key_release_event", G_CALLBACK(key_press), NULL);
-    
+  
   GtkWidget *vbox;
   vbox = gtk_vbox_new(FALSE, 1);
-  /* gtk_container_add(GTK_CONTAINER(vbox), old_scrolled_window); */
-  /* gtk_container_add(GTK_CONTAINER(vbox), scrolled_window); */
-
-  /* gtk_box_pack_start(GTK_BOX(vbox), modeline, FALSE, FALSE, 0); */
+  content_vbox = gtk_vbox_new(FALSE, 1);
   //SCM record = scm_call_0(scm_c_public_ref("guile-user", "instantiate-root-window"));
   //SCM widget_pointer = scm_call_1(scm_c_public_ref("guile-user", "wud-widget2"), record);
   SCM widget_pointer = scm_call_0(scm_c_public_ref("guile-user", "instantiate-root-window"));
-  gtk_container_add(GTK_CONTAINER(vbox), 
-                    GTK_WIDGET(scm_to_pointer(widget_pointer)));
+  content = scm_c_get_gtk_widget(widget_pointer);
+  gtk_container_add(GTK_CONTAINER(content_vbox),  
+                    GTK_WIDGET(content));
+
+  gtk_container_add(GTK_CONTAINER(vbox),  
+                    GTK_WIDGET(content_vbox));
 
   // Add the echo area.
-  gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_VBOX(vbox), label, FALSE, FALSE, 0);
 
   // Put the scrollable area into the main window.
-  gtk_container_add(GTK_CONTAINER(main_window), vbox);
+  gtk_container_add(GTK_WINDOW(main_window), vbox);
 
 
   // Load a web page into the browser instance.
@@ -342,10 +304,6 @@ static gboolean process_and_update_emacsy(void *user_data)
   gtk_label_set_markup(GTK_LABEL(label), markup);
   g_free(markup);
 
-  markup = g_markup_printf_escaped ("<span foreground=\"white\" background=\"black\" underline=\"none\"><tt>%s </tt></span>", modeline_string);
-  gtk_label_set_markup(GTK_LABEL(modeline), markup);
-  g_free(markup);
-
   // Show the cursor.  Exercise for the reader: Make it blink.
   char message[255];
   memset(message, ' ', 254);
@@ -365,20 +323,38 @@ static gboolean process_and_update_emacsy(void *user_data)
   These C functions are exposed as callable procedures in Scheme.
 */
 
-SCM_DEFINE(scm_update_label_x, "update-label!", 2, 0, 0,
-           (SCM scm_label, SCM string),
+SCM_DEFINE(scm_update_label_x, "update-label!", 3, 0, 0,
+           (SCM scm_label, SCM string, SCM selected_p),
            "Update a GTK label to the given string.")
 {
   const char *modeline_string = emacsy_mode_line();
   const char *status = emacsy_message_or_echo_area();
   // Use markup to style the status line.
-  char *markup = g_markup_printf_escaped ("<span foreground=\"white\" background=\"black\" underline=\"none\"><tt>%s </tt></span>", scm_to_locale_string(string));
+  char *markup;
+  if (scm_is_true(selected_p)) {
+    markup = g_markup_printf_escaped ("<span foreground=\"white\" background=\"grey\" underline=\"none\"><tt>%s </tt></span>", scm_to_locale_string(string));
+  } else {
+    markup = g_markup_printf_escaped ("<span foreground=\"white\" background=\"black\" underline=\"none\"><tt>%s </tt></span>", scm_to_locale_string(string));
+  }
   GtkWidget *label = (GtkWidget *) scm_to_pointer(scm_label);
   gtk_label_set_markup(GTK_LABEL(label), markup);
   g_free(markup);
   return SCM_UNSPECIFIED;
 }
 
+SCM_DEFINE(scm_set_content_vbox_x, "set-window-content!", 1, 0, 0,
+           (SCM widget),
+           "Delete contents and update a content vbox to the given widget.")
+{
+  gtk_container_remove(GTK_CONTAINER(content_vbox), content);
+  content = scm_c_get_gtk_widget(widget);
+  gtk_container_add(GTK_CONTAINER(content_vbox), content);
+  gtk_widget_show_all(content_vbox);
+  return SCM_UNSPECIFIED;
+}
+
+
+/*
 SCM_DEFINE(scm_set_web_view_x, "set-web-view!", 1, 0, 0,
            (SCM web_view_pointer),
            "Set the current web view to the given pointer.")
@@ -396,6 +372,7 @@ SCM_DEFINE(scm_set_web_view_x, "set-web-view!", 1, 0, 0,
   }
   return SCM_UNSPECIFIED;
 }
+*/
 
 SCM_DEFINE(scm_make_web_view, "make-web-view", 0, 0, 0,
            (),
@@ -413,6 +390,22 @@ SCM_DEFINE(scm_webkit_load_url, "webkit-load-url", 1, 0, 0,
     const char *c_url = scm_to_locale_string(scm_url);
     webkit_web_view_load_uri(scm_c_current_web_view(), c_url);
     return SCM_UNSPECIFIED;
+}
+
+SCM_DEFINE(scm_webkit_get_url, "webkit-get-url", 0, 0, 0,
+           (),
+           "Returns the current URL to the WebView.")
+{
+  gchar *url = webkit_web_view_get_uri(scm_c_current_web_view());
+  return scm_from_locale_string(url ? url : "");
+}
+
+SCM_DEFINE(scm_webkit_get_title, "webkit-get-title", 0, 0, 0,
+           (),
+           "Returns the current Title to the WebView.")
+{
+  gchar *title = webkit_web_view_get_title(scm_c_current_web_view());
+  return scm_from_locale_string(title ? title : "");
 }
 
 SCM_DEFINE(scm_webkit_forward, "webkit-forward", 0, 0, 0,
@@ -491,8 +484,8 @@ SCM_DEFINE(scm_current_web_view, "webkit-zoom-out", 0, 0, 0,
            (),
            "Returns the web_view associated with the current buffer if it exists.")
 {
-  SCM scm_web_view = scm_call_1(scm_c_public_ref("emacsy emacsy", "local-var"),
-                                scm_string_to_symbol(scm_from_locale_string("web-view")));
+  SCM scm_web_view = scm_call_0(scm_c_public_ref("guile-user", "current-web-view"));
+
   return scm_web_view;
 }
 
@@ -502,7 +495,7 @@ WebKitWebView *scm_c_current_web_view()
   if (! scm_is_false(web_view)) {
     return (WebKitWebView *) scm_to_pointer(web_view);
   }
-  return SCM_BOOL_F;
+  return NULL;
 }
 
 SCM_DEFINE(scm_web_view_load_string, "web-view-load-string", 2, 0, 0,
@@ -515,7 +508,7 @@ SCM_DEFINE(scm_web_view_load_string, "web-view-load-string", 2, 0, 0,
                              scm_to_locale_string(string),
                              "text/plain",
                              "utf-8",
-                             "file://something");
+                             "buffer://?");
  return SCM_UNSPECIFIED;
 }
 
@@ -542,6 +535,7 @@ SCM_DEFINE(scm_create_web_view_window, "create-web-view-window", 3, 0, 0,
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),
                                  GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
   gtk_container_add(GTK_CONTAINER(scrolled_window), GTK_WIDGET(web_view));
+  gtk_widget_show_all(GTK_WIDGET(web_view));
   gtk_widget_show_all(GTK_WIDGET(scrolled_window));
   
   modeline = gtk_label_new("modeline");
@@ -569,24 +563,51 @@ SCM_DEFINE(scm_create_web_view_window, "create-web-view-window", 3, 0, 0,
   return scm_user_data;
 }
 
-SCM_DEFINE(scm_create_vertical_window, "create-vertical-window", 1, 0, 0,
-           (SCM list),
-           "Returns a pointer to a GtkWidget* that contains a vertical window with the list of other widgets as its children.")
+SCM_DEFINE(scm_get_gtk_widget, "get-gtk-widget", 1, 0, 0,
+           (SCM pointer),
+           "Returns a pointer to a GtkWidget from a pointer or a window-user-data object.")
+{
+  if (scm_is_true(scm_call_1(scm_c_public_ref("guile-user", "window-user-data?2"),
+                             pointer))) {
+    return scm_call_1(scm_c_public_ref("guile-user", "wud-widget2"),
+                      pointer);
+  } else if (scm_is_true(scm_pointer_p(pointer))) {
+    return pointer;
+  } else {
+    return SCM_BOOL_F;
+  }
+}
+
+GtkWidget* scm_c_get_gtk_widget(SCM pointer)
+{
+  SCM widget = scm_get_gtk_widget(pointer);
+  if (scm_is_true(widget)) {
+    return GTK_WIDGET(scm_to_pointer(widget));
+  } else {
+    return NULL;
+  }
+}
+
+SCM_DEFINE(scm_create_gtk_window, "create-gtk-window", 2, 0, 0,
+           (SCM list, SCM vertical_p),
+           "Returns a pointer to a GtkWidget* that contains a vertical or "
+"horizontal window with the list of other widgets as its children.")
 {
   GtkWidget *vbox;
-  vbox = gtk_vbox_new(FALSE, 1);
+  if (scm_is_true(vertical_p)) {
+    vbox = gtk_vbox_new(FALSE, 1);
+  } else {
+    vbox = gtk_hbox_new(FALSE, 1);
+  }
 
   for (; ! scm_is_null(list); list = scm_cdr(list)) {
     SCM pointer = scm_car(list);
-    if (scm_call_1(scm_c_public_ref("guile-user", "window-user-data?2"),
-                   pointer)) {
-      pointer = scm_call_1(scm_c_public_ref("guile-user", "wud-widget2"),
-                           pointer);
-    }
-    if (scm_is_true(scm_pointer_p(pointer))) {
-      gtk_container_add(GTK_CONTAINER(vbox), GTK_WIDGET(scm_to_pointer(pointer)));
+    GtkWidget *widget = GTK_WIDGET(scm_c_get_gtk_widget(pointer));
+    if (gtk_widget_get_parent(widget)) {
+      // If it has a parent, we have to reparent it rather than add it.
+      gtk_widget_reparent(widget, GTK_WIDGET(vbox));
     } else {
-      fprintf(stderr, "warning: got a non-pointer for create-vertical-window.");
+      gtk_container_add(GTK_CONTAINER(vbox), widget);
     }
   }
   gtk_widget_show_all(GTK_WIDGET(vbox));
